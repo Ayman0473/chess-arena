@@ -1,0 +1,6 @@
+{
+  "name": "ChessArena - Real-Time Chess Platform",
+  "description": "Full-featured real-time chess platform with online PvP matchmaking, live spectator mode, multi-level AI opponents, interactive move analysis, and Elo rating history.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
