@@ -1,14 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { MoveRecord } from '../types';
 import { getCapturedPieces, getMaterialDifference } from '../lib/chessEngine';
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Flag, Handshake } from 'lucide-react';
+import { Flag, Handshake, AlertTriangle, Check, X } from 'lucide-react';
 
 interface MoveHistoryProps {
   history: MoveRecord[];
   fen: string;
+  roomMode?: string;
   onOfferDraw?: () => void;
+  onRespondDraw?: (accept: boolean) => void;
   onResign?: () => void;
   drawOfferedBy?: string | null;
+  userColor?: string;
   currentTurnColor?: string;
   disabled?: boolean;
 }
@@ -31,13 +34,24 @@ const PIECE_UNICODE: Record<string, string> = {
 export const MoveHistory: React.FC<MoveHistoryProps> = ({
   history,
   fen,
+  roomMode,
   onOfferDraw,
+  onRespondDraw,
   onResign,
   drawOfferedBy,
+  userColor,
   disabled = false,
 }) => {
+  const [confirmResign, setConfirmResign] = useState(false);
   const { whiteCaptured, blackCaptured } = getCapturedPieces(fen);
   const { whiteDiff, blackDiff } = getMaterialDifference(fen);
+
+  const isOpponentDrawOffer = Boolean(
+    drawOfferedBy && (roomMode === 'pvp_local' || (userColor && drawOfferedBy !== userColor))
+  );
+  const isMyDrawOffer = Boolean(
+    drawOfferedBy && roomMode !== 'pvp_local' && userColor && drawOfferedBy === userColor
+  );
 
   // Group moves into white & black pairs
   const movePairs: { moveNumber: number; whiteSan?: string; blackSan?: string }[] = [];
@@ -116,8 +130,62 @@ export const MoveHistory: React.FC<MoveHistoryProps> = ({
         )}
       </div>
 
-      {/* Actions (Draw Offer & Resign) */}
-      {(onOfferDraw || onResign) && (
+      {/* Incoming Opponent Draw Offer Alert Banner inside panel */}
+      {isOpponentDrawOffer && (
+        <div className="p-3 bg-amber-500/15 border-t border-amber-500/30 space-y-2 animate-fadeIn">
+          <div className="flex items-center gap-1.5 text-xs font-extrabold text-amber-300">
+            <Handshake className="w-4 h-4 text-amber-400" />
+            <span>Opponent Offered a Draw!</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => onRespondDraw?.(true)}
+              className="px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-1.5"
+            >
+              <Check className="w-4 h-4" />
+              <span>Accept Draw</span>
+            </button>
+            <button
+              onClick={() => onRespondDraw?.(false)}
+              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 transition-colors flex items-center justify-center gap-1.5"
+            >
+              <X className="w-4 h-4" />
+              <span>Decline</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Resign Confirmation Inline Box */}
+      {confirmResign && (
+        <div className="p-3 bg-rose-950/80 border-t border-rose-800/80 space-y-2 text-center animate-fadeIn">
+          <p className="text-xs font-bold text-rose-200 flex items-center justify-center gap-1.5">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>Are you sure you want to resign?</span>
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                setConfirmResign(false);
+                onResign?.();
+              }}
+              className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs shadow-md shadow-rose-600/30 transition-all flex items-center justify-center gap-1"
+            >
+              <Flag className="w-3.5 h-3.5" />
+              <span>Yes, Resign</span>
+            </button>
+            <button
+              onClick={() => setConfirmResign(false)}
+              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors border border-slate-700"
+            >
+              <span>Cancel</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Standard Actions (Draw Offer & Resign) */}
+      {!confirmResign && !isOpponentDrawOffer && (onOfferDraw || onResign) && (
         <div className="p-3 bg-slate-800/80 border-t border-slate-800 grid grid-cols-2 gap-2">
           {onOfferDraw && (
             <button
@@ -126,13 +194,13 @@ export const MoveHistory: React.FC<MoveHistoryProps> = ({
               className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition-colors border border-slate-700 flex items-center justify-center gap-1.5 disabled:opacity-50"
             >
               <Handshake className="w-4 h-4 text-amber-400" />
-              <span>{drawOfferedBy ? 'Draw Offered' : 'Offer Draw'}</span>
+              <span>{isMyDrawOffer ? 'Draw Offered...' : 'Offer Draw'}</span>
             </button>
           )}
 
           {onResign && (
             <button
-              onClick={onResign}
+              onClick={() => setConfirmResign(true)}
               disabled={disabled}
               className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold text-xs transition-colors border border-rose-500/30 flex items-center justify-center gap-1.5 disabled:opacity-50"
             >

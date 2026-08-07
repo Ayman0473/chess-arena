@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Timer, AlertCircle } from 'lucide-react';
 import { PieceColor } from '../types';
 
@@ -21,11 +21,47 @@ export const GameClock: React.FC<GameClockProps> = ({
   isActive,
   isTurn,
 }) => {
-  const totalSeconds = Math.max(0, Math.floor(timeLeft / 1000));
+  const [displayTime, setDisplayTime] = useState(timeLeft);
+  const startTimeRef = useRef<number>(Date.now());
+  const initialTimeRef = useRef<number>(timeLeft);
+
+  // Sync state whenever props update from server
+  useEffect(() => {
+    setDisplayTime(timeLeft);
+    startTimeRef.current = Date.now();
+    initialTimeRef.current = timeLeft;
+  }, [timeLeft, isTurn, isActive]);
+
+  // Continuously count down when game is active and it's this player's turn
+  useEffect(() => {
+    if (!isActive || !isTurn) return;
+
+    startTimeRef.current = Date.now();
+    initialTimeRef.current = displayTime;
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTimeRef.current;
+      const remaining = Math.max(0, initialTimeRef.current - elapsed);
+      setDisplayTime(remaining);
+
+      if (remaining <= 0) {
+        clearInterval(interval);
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isActive, isTurn]);
+
+  const totalSeconds = Math.max(0, Math.floor(displayTime / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
 
-  const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  if (totalSeconds < 10) {
+    const tenths = Math.floor((Math.max(0, displayTime) % 1000) / 100);
+    formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${tenths}`;
+  }
+
   const isLowTime = totalSeconds <= 30 && isActive;
 
   return (

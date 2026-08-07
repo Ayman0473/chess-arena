@@ -16,7 +16,7 @@ import {
   TimeControl,
   PieceColor,
 } from './src/types';
-import { calculateEloDelta, getAIMove } from './src/lib/chessEngine';
+import { calculateEloDelta, getAIMove, evaluateBoard } from './src/lib/chessEngine';
 
 const PORT = 3000;
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -621,11 +621,60 @@ async function startServer() {
           roomId: room.id,
           senderId: 'system',
           senderName: 'System',
-          message: `${color === 'w' ? room.whitePlayer.username : room.blackPlayer?.username} offered a draw.`,
+          message: `${color === 'w' ? room.whitePlayer.username : (room.blackPlayer?.username || 'Opponent')} offered a draw.`,
           timestamp: Date.now(),
           isSystem: true,
         };
         broadcastRoom(room.id, { type: 'CHAT_BROADCAST', message: sysMsg });
+
+        // Handle AI draw response if playing against bot
+        if (room.mode === 'ai') {
+          setTimeout(() => {
+            if (room.status !== 'active' || !room.drawOfferedBy) return;
+
+            const chess = new Chess(room.fen);
+            const score = evaluateBoard(chess); // positive = White ahead, negative = Black ahead
+            // Bot is Black: if White score <= 30 (bot equal or winning or slightly behind) or random chance
+            const aiAccepts = score <= 30 || Math.random() < 0.5;
+
+            if (aiAccepts) {
+              room.status = 'draw';
+              room.winner = 'draw';
+              room.winReason = 'Draw agreed with Bot';
+              room.drawOfferedBy = null;
+              finalizeGameOutcome(room);
+
+              broadcastRoom(room.id, { type: 'ROOM_STATE', room });
+              broadcastRoom(room.id, {
+                type: 'CHAT_BROADCAST',
+                message: {
+                  id: 'sys_' + Date.now(),
+                  roomId: room.id,
+                  senderId: 'system',
+                  senderName: 'System',
+                  message: 'Bot accepted the draw offer. Game drawn!',
+                  timestamp: Date.now(),
+                  isSystem: true,
+                },
+              });
+            } else {
+              room.drawOfferedBy = null;
+              broadcastRoom(room.id, { type: 'ROOM_STATE', room });
+              broadcastRoom(room.id, {
+                type: 'CHAT_BROADCAST',
+                message: {
+                  id: 'sys_' + Date.now(),
+                  roomId: room.id,
+                  senderId: 'system',
+                  senderName: 'System',
+                  message: 'Bot declined the draw offer.',
+                  timestamp: Date.now(),
+                  isSystem: true,
+                },
+              });
+            }
+          }, 1000);
+        }
         break;
       }
 
@@ -637,13 +686,39 @@ async function startServer() {
         if (msg.accept) {
           room.status = 'draw';
           room.winner = 'draw';
-          room.winReason = 'Draw agreed';
+          room.winReason = 'Draw agreed by players';
+          room.drawOfferedBy = null;
           finalizeGameOutcome(room);
+
+          broadcastRoom(room.id, { type: 'ROOM_STATE', room });
+          broadcastRoom(room.id, {
+            type: 'CHAT_BROADCAST',
+            message: {
+              id: 'sys_' + Date.now(),
+              roomId: room.id,
+              senderId: 'system',
+              senderName: 'System',
+              message: 'Draw offer accepted. Game drawn!',
+              timestamp: Date.now(),
+              isSystem: true,
+            },
+          });
         } else {
           room.drawOfferedBy = null;
+          broadcastRoom(room.id, { type: 'ROOM_STATE', room });
+          broadcastRoom(room.id, {
+            type: 'CHAT_BROADCAST',
+            message: {
+              id: 'sys_' + Date.now(),
+              roomId: room.id,
+              senderId: 'system',
+              senderName: 'System',
+              message: 'Draw offer was declined.',
+              timestamp: Date.now(),
+              isSystem: true,
+            },
+          });
         }
-
-        broadcastRoom(room.id, { type: 'ROOM_STATE', room });
         break;
       }
 

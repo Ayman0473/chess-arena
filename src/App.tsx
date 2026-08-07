@@ -325,19 +325,23 @@ export default function App() {
                   )}
 
                   {/* Draw Offer Notification Banner */}
-                  {!isSpectator && room.drawOfferedBy && room.drawOfferedBy !== userColor && (
-                    <div className="flex items-center gap-2 bg-amber-500/20 border border-amber-500/40 px-3 py-1.5 rounded-xl">
-                      <Handshake className="w-4 h-4 text-amber-400" />
-                      <span className="text-xs font-bold text-amber-300">Draw Offered!</span>
+                  {!isSpectator && room.drawOfferedBy && (room.mode === 'pvp_local' || room.drawOfferedBy !== userColor) && (
+                    <div className="flex items-center gap-2.5 bg-amber-500/20 border border-amber-500/40 px-3.5 py-2 rounded-xl shadow-lg animate-fadeIn">
+                      <Handshake className="w-4 h-4 text-amber-400 shrink-0 animate-bounce" />
+                      <span className="text-xs font-extrabold text-amber-300">
+                        {room.mode === 'pvp_local'
+                          ? `${room.drawOfferedBy === 'w' ? 'White' : 'Black'} offered a draw!`
+                          : 'Opponent offered a draw!'}
+                      </span>
                       <button
                         onClick={() => handleRespondDraw(true)}
-                        className="px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-xs font-bold"
+                        className="px-3 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black transition-all shadow-md shadow-emerald-500/20"
                       >
                         Accept
                       </button>
                       <button
                         onClick={() => handleRespondDraw(false)}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 text-xs font-bold"
+                        className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-colors"
                       >
                         Decline
                       </button>
@@ -378,9 +382,12 @@ export default function App() {
                     <MoveHistory
                       history={room.history}
                       fen={room.fen}
+                      roomMode={room.mode}
                       onOfferDraw={!isSpectator && room.status === 'active' ? handleOfferDraw : undefined}
+                      onRespondDraw={!isSpectator && room.status === 'active' ? handleRespondDraw : undefined}
                       onResign={!isSpectator && room.status === 'active' ? handleResign : undefined}
                       drawOfferedBy={room.drawOfferedBy}
+                      userColor={userColor}
                       currentTurnColor={room.turn}
                       disabled={isSpectator || room.status !== 'active'}
                     />

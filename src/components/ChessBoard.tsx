@@ -222,6 +222,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
   const [legalMoves, setLegalMoves] = useState<string[]>([]);
   const [pendingPromotion, setPendingPromotion] = useState<{ from: Square; to: Square } | null>(null);
+  const [draggedSquare, setDraggedSquare] = useState<Square | null>(null);
+  const [dragOverSquare, setDragOverSquare] = useState<Square | null>(null);
 
   const chess = new Chess(fen);
   const isCheck = chess.inCheck();
@@ -284,6 +286,71 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     }
   };
 
+  const handleDragStart = (e: React.DragEvent, square: Square) => {
+    if (disabled) return;
+    const piece = chess.get(square);
+    if (!piece || piece.color !== turn) return;
+
+    setDraggedSquare(square);
+    setSelectedSquare(square);
+    const moves = chess.moves({ square, verbose: true }).map((m) => m.to);
+    setLegalMoves(moves);
+
+    e.dataTransfer.setData('text/plain', square);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, square: Square) => {
+    if (disabled) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverSquare !== square) {
+      setDragOverSquare(square);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent, square: Square) => {
+    if (dragOverSquare === square) {
+      setDragOverSquare(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetSquare: Square) => {
+    if (disabled) return;
+    e.preventDefault();
+    setDragOverSquare(null);
+
+    const fromSquare = draggedSquare || (e.dataTransfer.getData('text/plain') as Square);
+    if (!fromSquare || fromSquare === targetSquare) {
+      setDraggedSquare(null);
+      return;
+    }
+
+    const moves = chess.moves({ square: fromSquare, verbose: true }).map((m) => m.to);
+    if (moves.includes(targetSquare)) {
+      const piece = chess.get(fromSquare);
+      const isPromotion =
+        piece &&
+        piece.type === 'p' &&
+        ((piece.color === 'w' && targetSquare[1] === '8') || (piece.color === 'b' && targetSquare[1] === '1'));
+
+      if (isPromotion) {
+        setPendingPromotion({ from: fromSquare, to: targetSquare });
+      } else {
+        onMove(fromSquare, targetSquare);
+      }
+    }
+
+    setDraggedSquare(null);
+    setSelectedSquare(null);
+    setLegalMoves([]);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedSquare(null);
+    setDragOverSquare(null);
+  };
+
   const handlePromotionSelect = (piece: 'q' | 'r' | 'b' | 'n') => {
     if (pendingPromotion) {
       onMove(pendingPromotion.from, pendingPromotion.to, piece);
@@ -310,18 +377,25 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             const isLegal = legalMoves.includes(square);
             const isLastMoveSquare = lastMove && (lastMove.from === square || lastMove.to === square);
             const isKingCheck = kingSquareInCheck === square;
+            const isDragOver = dragOverSquare === square;
 
             const pieceKey = piece ? `${piece.color}${piece.type.toUpperCase()}` : null;
+            const isDraggable = !disabled && piece?.color === turn;
 
             return (
               <div
                 key={square}
                 onClick={() => handleSquareClick(square)}
+                onDragOver={(e) => handleDragOver(e, square)}
+                onDragLeave={(e) => handleDragLeave(e, square)}
+                onDrop={(e) => handleDrop(e, square)}
                 className={`relative flex items-center justify-center cursor-pointer transition-colors ${
                   isLight ? 'bg-amber-100' : 'bg-emerald-800'
                 } ${isSelected ? 'bg-amber-300 ring-4 ring-amber-500 z-10' : ''} ${
-                  isLastMoveSquare ? 'bg-amber-400/50' : ''
-                } ${isKingCheck ? 'bg-rose-600 animate-pulse' : ''}`}
+                  isDragOver && isLegal ? 'ring-4 ring-emerald-400 z-20 scale-[1.02]' : ''
+                } ${isLastMoveSquare ? 'bg-amber-400/50' : ''} ${
+                  isKingCheck ? 'bg-rose-600 animate-pulse' : ''
+                }`}
               >
                 {/* File / Rank Labels */}
                 {fIdx === 0 && (
@@ -353,7 +427,14 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
                 {/* Piece Render */}
                 {pieceKey && PIECE_SVGS[pieceKey] && (
-                  <div className="w-full h-full p-1 sm:p-1.5 transition-transform hover:scale-105">
+                  <div
+                    draggable={isDraggable}
+                    onDragStart={(e) => handleDragStart(e, square)}
+                    onDragEnd={handleDragEnd}
+                    className={`w-full h-full p-1 sm:p-1.5 transition-transform hover:scale-105 ${
+                      isDraggable ? 'cursor-grab active:cursor-grabbing' : ''
+                    }`}
+                  >
                     {PIECE_SVGS[pieceKey]}
                   </div>
                 )}
