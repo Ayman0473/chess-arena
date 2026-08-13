@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Chess, Square, PieceSymbol, Color } from 'chess.js';
+import { Chess, Square } from 'chess.js';
 import { PieceColor } from '../types';
+import { Zap, X } from 'lucide-react';
 
 interface ChessBoardProps {
   fen: string;
@@ -225,6 +226,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const [draggedSquare, setDraggedSquare] = useState<Square | null>(null);
   const [dragOverSquare, setDragOverSquare] = useState<Square | null>(null);
 
+  // Pre-move State
+  const [premove, setPremove] = useState<{ from: Square; to: Square } | null>(null);
+  const [premoveSource, setPremoveSource] = useState<Square | null>(null);
+
+  const playerColor = orientation || 'w';
+  const isMyTurn = turn === playerColor;
+
   const chess = new Chess(fen);
   const isCheck = chess.inCheck();
 
@@ -243,58 +251,145 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     }
   }
 
-  const handleSquareClick = (square: Square) => {
-    if (disabled) return;
+  // Calculate pseudo-legal candidate moves for a pre-move
+  const getPseudoLegalMovesForPremove = (currentFen: string, pColor: PieceColor, square: Square): string[] => {
+    try {
+      const parts = currentFen.split(' ');
+      parts[1] = pColor;
+      const simChess = new Chess(parts.join(' '));
+      return simChess.moves({ square, verbose: true }).map((m) => m.to);
+    } catch {
+      return [];
+    }
+  };
 
-    if (selectedSquare) {
-      if (selectedSquare === square) {
-        setSelectedSquare(null);
-        setLegalMoves([]);
-        return;
-      }
+  // Auto-execute pending pre-move when turn switches back to active player
+  useEffect(() => {
+    if (premove && isMyTurn && !disabled) {
+      const simChess = new Chess(fen);
+      const moves = simChess.moves({ square: premove.from, verbose: true });
+      const match = moves.find((m) => m.to === premove.to);
 
-      // Check if target is in legal moves
-      if (legalMoves.includes(square)) {
-        const piece = chess.get(selectedSquare);
-        // Check for pawn promotion
+      if (match) {
+        const piece = simChess.get(premove.from);
         const isPromotion =
           piece &&
           piece.type === 'p' &&
-          ((piece.color === 'w' && square[1] === '8') || (piece.color === 'b' && square[1] === '1'));
+          ((piece.color === 'w' && premove.to[1] === '8') ||
+           (piece.color === 'b' && premove.to[1] === '1'));
 
-        if (isPromotion) {
-          setPendingPromotion({ from: selectedSquare, to: square });
-        } else {
-          onMove(selectedSquare, square);
-        }
-
-        setSelectedSquare(null);
-        setLegalMoves([]);
-        return;
+        onMove(premove.from, premove.to, isPromotion ? 'q' : undefined);
       }
-    }
 
-    // Select piece if it belongs to active turn color
-    const piece = chess.get(square);
-    if (piece && piece.color === turn) {
-      setSelectedSquare(square);
-      const moves = chess.moves({ square, verbose: true }).map((m) => m.to);
-      setLegalMoves(moves);
-    } else {
+      // Always clear pre-move after turn resolves
+      setPremove(null);
+      setPremoveSource(null);
       setSelectedSquare(null);
       setLegalMoves([]);
+    }
+  }, [fen, turn, playerColor, disabled]);
+
+  const handleSquareClick = (square: Square) => {
+    if (disabled) return;
+
+    if (isMyTurn) {
+      if (premove) {
+        setPremove(null);
+        setPremoveSource(null);
+      }
+
+      if (selectedSquare) {
+        if (selectedSquare === square) {
+          setSelectedSquare(null);
+          setLegalMoves([]);
+          return;
+        }
+
+        if (legalMoves.includes(square)) {
+          const piece = chess.get(selectedSquare);
+          const isPromotion =
+            piece &&
+            piece.type === 'p' &&
+            ((piece.color === 'w' && square[1] === '8') || (piece.color === 'b' && square[1] === '1'));
+
+          if (isPromotion) {
+            setPendingPromotion({ from: selectedSquare, to: square });
+          } else {
+            onMove(selectedSquare, square);
+          }
+
+          setSelectedSquare(null);
+          setLegalMoves([]);
+          return;
+        }
+      }
+
+      const piece = chess.get(square);
+      if (piece && piece.color === turn) {
+        setSelectedSquare(square);
+        const moves = chess.moves({ square, verbose: true }).map((m) => m.to);
+        setLegalMoves(moves);
+      } else {
+        setSelectedSquare(null);
+        setLegalMoves([]);
+      }
+    } else {
+      // OPPONENT TURN -> PRE-MOVE LOGIC
+      if (premove) {
+        setPremove(null);
+      }
+
+      const clickedPiece = chess.get(square);
+
+      if (premoveSource) {
+        if (premoveSource === square) {
+          setPremoveSource(null);
+          setLegalMoves([]);
+          return;
+        }
+
+        if (clickedPiece && clickedPiece.color === playerColor) {
+          setPremoveSource(square);
+          const pseudoMoves = getPseudoLegalMovesForPremove(fen, playerColor, square);
+          setLegalMoves(pseudoMoves);
+          return;
+        }
+
+        setPremove({ from: premoveSource, to: square });
+        setPremoveSource(null);
+        setLegalMoves([]);
+      } else {
+        if (clickedPiece && clickedPiece.color === playerColor) {
+          setPremoveSource(square);
+          const pseudoMoves = getPseudoLegalMovesForPremove(fen, playerColor, square);
+          setLegalMoves(pseudoMoves);
+        } else {
+          setPremove(null);
+          setPremoveSource(null);
+          setLegalMoves([]);
+        }
+      }
     }
   };
 
   const handleDragStart = (e: React.DragEvent, square: Square) => {
     if (disabled) return;
     const piece = chess.get(square);
-    if (!piece || piece.color !== turn) return;
+    if (!piece) return;
 
-    setDraggedSquare(square);
-    setSelectedSquare(square);
-    const moves = chess.moves({ square, verbose: true }).map((m) => m.to);
-    setLegalMoves(moves);
+    if (isMyTurn) {
+      if (piece.color !== turn) return;
+      setDraggedSquare(square);
+      setSelectedSquare(square);
+      const moves = chess.moves({ square, verbose: true }).map((m) => m.to);
+      setLegalMoves(moves);
+    } else {
+      if (piece.color !== playerColor) return;
+      setDraggedSquare(square);
+      setPremoveSource(square);
+      const pseudoMoves = getPseudoLegalMovesForPremove(fen, playerColor, square);
+      setLegalMoves(pseudoMoves);
+    }
 
     e.dataTransfer.setData('text/plain', square);
     e.dataTransfer.effectAllowed = 'move';
@@ -326,24 +421,34 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       return;
     }
 
-    const moves = chess.moves({ square: fromSquare, verbose: true }).map((m) => m.to);
-    if (moves.includes(targetSquare)) {
-      const piece = chess.get(fromSquare);
-      const isPromotion =
-        piece &&
-        piece.type === 'p' &&
-        ((piece.color === 'w' && targetSquare[1] === '8') || (piece.color === 'b' && targetSquare[1] === '1'));
+    if (isMyTurn) {
+      const moves = chess.moves({ square: fromSquare, verbose: true }).map((m) => m.to);
+      if (moves.includes(targetSquare)) {
+        const piece = chess.get(fromSquare);
+        const isPromotion =
+          piece &&
+          piece.type === 'p' &&
+          ((piece.color === 'w' && targetSquare[1] === '8') || (piece.color === 'b' && targetSquare[1] === '1'));
 
-      if (isPromotion) {
-        setPendingPromotion({ from: fromSquare, to: targetSquare });
-      } else {
-        onMove(fromSquare, targetSquare);
+        if (isPromotion) {
+          setPendingPromotion({ from: fromSquare, to: targetSquare });
+        } else {
+          onMove(fromSquare, targetSquare);
+        }
       }
-    }
 
-    setDraggedSquare(null);
-    setSelectedSquare(null);
-    setLegalMoves([]);
+      setDraggedSquare(null);
+      setSelectedSquare(null);
+      setLegalMoves([]);
+    } else {
+      const piece = chess.get(fromSquare);
+      if (piece && piece.color === playerColor) {
+        setPremove({ from: fromSquare, to: targetSquare });
+      }
+      setDraggedSquare(null);
+      setPremoveSource(null);
+      setLegalMoves([]);
+    }
   };
 
   const handleDragEnd = () => {
@@ -365,7 +470,38 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const displayFiles = orientation === 'w' ? files : [...files].reverse();
 
   return (
-    <div className="relative select-none w-full max-w-[560px] aspect-square mx-auto rounded-2xl overflow-hidden shadow-2xl border-4 border-slate-800 bg-slate-900">
+    <div
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setPremove(null);
+        setPremoveSource(null);
+        setSelectedSquare(null);
+        setLegalMoves([]);
+      }}
+      className="relative select-none w-full max-w-[560px] aspect-square mx-auto rounded-2xl overflow-hidden shadow-2xl border-4 border-slate-800 bg-slate-900"
+    >
+      {/* Floating Pre-move Banner */}
+      {premove && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 bg-purple-950/90 border border-purple-400/60 text-purple-100 px-3.5 py-1.5 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-2 text-xs font-bold animate-fadeIn">
+          <Zap className="w-3.5 h-3.5 text-purple-400 fill-purple-400/30 animate-pulse shrink-0" />
+          <span>
+            Premove: <span className="text-white font-mono uppercase tracking-wider">{premove.from} → {premove.to}</span>
+          </span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setPremove(null);
+              setPremoveSource(null);
+              setLegalMoves([]);
+            }}
+            className="ml-1 p-0.5 hover:bg-purple-800/80 rounded-full text-purple-300 hover:text-white transition-colors"
+            title="Cancel premove (or right-click board)"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Board Grid */}
       <div className="grid grid-cols-8 grid-rows-8 w-full h-full">
         {displayRanks.map((rank, rIdx) =>
@@ -373,16 +509,18 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             const square = `${file}${rank}` as Square;
             const isLight = (rIdx + fIdx) % 2 === 0;
             const piece = chess.get(square);
-            const isSelected = selectedSquare === square;
+
+            const isSelected = isMyTurn ? selectedSquare === square : premoveSource === square;
             const isLegal = legalMoves.includes(square);
+            const isPremoveFrom = premove && premove.from === square;
+            const isPremoveTo = premove && premove.to === square;
             const isLastMoveFrom = lastMove && lastMove.from === square;
             const isLastMoveTo = lastMove && lastMove.to === square;
-            const isLastMoveSquare = isLastMoveFrom || isLastMoveTo;
             const isKingCheck = kingSquareInCheck === square;
             const isDragOver = dragOverSquare === square;
 
             const pieceKey = piece ? `${piece.color}${piece.type.toUpperCase()}` : null;
-            const isDraggable = !disabled && piece?.color === turn;
+            const isDraggable = !disabled && (isMyTurn ? piece?.color === turn : piece?.color === playerColor);
 
             return (
               <div
@@ -393,8 +531,24 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 onDrop={(e) => handleDrop(e, square)}
                 className={`relative flex items-center justify-center cursor-pointer transition-colors ${
                   isLight ? 'bg-amber-100' : 'bg-emerald-800'
-                } ${isSelected ? 'bg-amber-300 ring-4 ring-amber-500 z-10 shadow-md' : ''} ${
-                  isDragOver && isLegal ? 'ring-4 ring-emerald-400 bg-emerald-400/40 z-20 scale-[1.02] shadow-xl' : ''
+                } ${
+                  isSelected
+                    ? isMyTurn
+                      ? 'bg-amber-300 ring-4 ring-amber-500 z-10 shadow-md'
+                      : 'bg-purple-400/80 ring-4 ring-purple-500 z-10 shadow-md'
+                    : ''
+                } ${
+                  isPremoveFrom
+                    ? 'bg-purple-600/70 border-2 border-dashed border-purple-300 ring-2 ring-purple-400 z-10'
+                    : isPremoveTo
+                    ? 'bg-purple-500/80 ring-4 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.7)] z-10'
+                    : ''
+                } ${
+                  isDragOver && isLegal
+                    ? isMyTurn
+                      ? 'ring-4 ring-emerald-400 bg-emerald-400/40 z-20 scale-[1.02] shadow-xl'
+                      : 'ring-4 ring-purple-400 bg-purple-400/40 z-20 scale-[1.02] shadow-xl'
+                    : ''
                 } ${
                   isLastMoveFrom
                     ? 'bg-amber-300/70 border-2 border-dashed border-amber-500/60'
@@ -423,12 +577,24 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   </span>
                 )}
 
-                {/* Legal Move Indicator (Potential Destination Squares) */}
+                {/* Legal Move & Pre-move Candidate Indicators */}
                 {isLegal && !piece && (
-                  <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-slate-900/40 dark:bg-slate-950/60 ring-2 ring-emerald-400/50 shadow-md backdrop-blur-sm transition-transform hover:scale-125 z-10" />
+                  <div
+                    className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full ring-2 shadow-md backdrop-blur-sm transition-transform hover:scale-125 z-10 ${
+                      isMyTurn
+                        ? 'bg-slate-900/40 dark:bg-slate-950/60 ring-emerald-400/50'
+                        : 'bg-purple-950/60 ring-purple-400/60'
+                    }`}
+                  />
                 )}
                 {isLegal && piece && (
-                  <div className="absolute inset-0.5 rounded-lg border-4 border-rose-500/90 bg-rose-500/20 shadow-[0_0_12px_rgba(244,63,94,0.5)] pointer-events-none z-10 animate-pulse" />
+                  <div
+                    className={`absolute inset-0.5 rounded-lg border-4 pointer-events-none z-10 animate-pulse ${
+                      isMyTurn
+                        ? 'border-rose-500/90 bg-rose-500/20 shadow-[0_0_12px_rgba(244,63,94,0.5)]'
+                        : 'border-purple-500/90 bg-purple-500/20 shadow-[0_0_12px_rgba(168,85,247,0.5)]'
+                    }`}
+                  />
                 )}
 
                 {/* Piece Render */}

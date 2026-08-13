@@ -400,7 +400,7 @@ export default function App() {
                       onMove={handleMove}
                       turn={room.turn}
                       orientation={userColor}
-                      disabled={isSpectator || room.status !== 'active' || (room.mode === 'pvp_online' && !isMyTurn)}
+                      disabled={isSpectator || room.status !== 'active'}
                       lastMove={room.lastMove}
                     />
                   </div>
