@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Chess, Square } from 'chess.js';
 import { PieceColor } from '../types';
+import { getCapturedPieces, getMaterialDifference } from '../lib/chessEngine';
 import { Zap, X } from 'lucide-react';
 
 interface ChessBoardProps {
@@ -210,6 +211,82 @@ const PIECE_SVGS: Record<string, React.ReactNode> = {
       />
     </svg>
   ),
+};
+
+// Helper for ordering captured pieces (Pawns, Knights, Bishops, Rooks, Queens)
+const PIECE_ORDER: Record<string, number> = {
+  p: 1, P: 1,
+  n: 2, N: 2,
+  b: 3, B: 3,
+  r: 4, R: 4,
+  q: 5, Q: 5,
+};
+
+const CapturedPiecesRow: React.FC<{
+  playerColor: 'w' | 'b';
+  capturedPieces: string[];
+  materialAdvantage: number;
+}> = ({ playerColor, capturedPieces, materialAdvantage }) => {
+  const sortedPieces = [...capturedPieces].sort(
+    (a, b) => (PIECE_ORDER[a] || 0) - (PIECE_ORDER[b] || 0)
+  );
+
+  return (
+    <div className="w-full max-w-[560px] mx-auto flex items-center justify-between px-3 py-1.5 bg-slate-900/90 border border-slate-800/80 rounded-xl text-xs backdrop-blur-md shadow-md min-h-[38px] transition-all">
+      <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar">
+        {/* Player Color Badge */}
+        <div className="flex items-center gap-1.5 shrink-0 bg-slate-950/60 px-2 py-0.5 rounded-lg border border-slate-800/80">
+          <span
+            className={`w-2.5 h-2.5 rounded-full border ${
+              playerColor === 'w'
+                ? 'bg-slate-100 border-slate-300 shadow-sm'
+                : 'bg-slate-900 border-slate-600'
+            }`}
+          />
+          <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">
+            {playerColor === 'w' ? 'White' : 'Black'}
+          </span>
+        </div>
+
+        {/* Divider */}
+        <div className="h-3.5 w-px bg-slate-800 shrink-0" />
+
+        {/* Captured Piece Icons */}
+        {sortedPieces.length > 0 ? (
+          <div className="flex items-center -space-x-1 sm:-space-x-1.5 py-0.5">
+            {sortedPieces.map((piece, idx) => {
+              const pieceKey =
+                playerColor === 'w'
+                  ? `b${piece.toUpperCase()}`
+                  : `w${piece.toUpperCase()}`;
+              return (
+                <div
+                  key={idx}
+                  className="w-5 h-5 sm:w-6 sm:h-6 shrink-0 transition-transform hover:scale-125 hover:z-10 drop-shadow"
+                  title={`${playerColor === 'w' ? 'Black' : 'White'} ${piece.toUpperCase()}`}
+                >
+                  {PIECE_SVGS[pieceKey]}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <span className="text-[10px] text-slate-500 italic">No pieces captured</span>
+        )}
+      </div>
+
+      {/* Advantage Score Badge */}
+      {materialAdvantage > 0 ? (
+        <div className="shrink-0 ml-2 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm flex items-center gap-0.5">
+          <span>+{materialAdvantage}</span>
+        </div>
+      ) : (
+        <span className="shrink-0 ml-2 text-[10px] font-mono text-slate-600 font-semibold uppercase">
+          =
+        </span>
+      )}
+    </div>
+  );
 };
 
 export const ChessBoard: React.FC<ChessBoardProps> = ({
@@ -469,17 +546,39 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const displayRanks = orientation === 'w' ? ranks : [...ranks].reverse();
   const displayFiles = orientation === 'w' ? files : [...files].reverse();
 
+  // Calculate captured pieces & material difference
+  const { whiteCaptured, blackCaptured } = getCapturedPieces(fen);
+  const { whiteDiff, blackDiff } = getMaterialDifference(fen);
+
+  const topColor = orientation === 'w' ? 'b' : 'w';
+  const bottomColor = orientation === 'w' ? 'w' : 'b';
+
+  const topCapturedPieces = topColor === 'b' ? blackCaptured : whiteCaptured;
+  const topAdvantage = topColor === 'b' ? blackDiff : whiteDiff;
+
+  const bottomCapturedPieces = bottomColor === 'w' ? whiteCaptured : blackCaptured;
+  const bottomAdvantage = bottomColor === 'w' ? whiteDiff : blackDiff;
+
   return (
-    <div
-      onContextMenu={(e) => {
-        e.preventDefault();
-        setPremove(null);
-        setPremoveSource(null);
-        setSelectedSquare(null);
-        setLegalMoves([]);
-      }}
-      className="relative select-none w-full max-w-[560px] aspect-square mx-auto rounded-2xl overflow-hidden shadow-2xl border-4 border-slate-800 bg-slate-900"
-    >
+    <div className="w-full max-w-[560px] mx-auto space-y-2">
+      {/* Top Player Captured Pieces Row */}
+      <CapturedPiecesRow
+        playerColor={topColor}
+        capturedPieces={topCapturedPieces}
+        materialAdvantage={topAdvantage}
+      />
+
+      {/* Main Board */}
+      <div
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setPremove(null);
+          setPremoveSource(null);
+          setSelectedSquare(null);
+          setLegalMoves([]);
+        }}
+        className="relative select-none w-full max-w-[560px] aspect-square mx-auto rounded-2xl overflow-hidden shadow-2xl border-4 border-slate-800 bg-slate-900"
+      >
       {/* Floating Pre-move Banner */}
       {premove && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 bg-purple-950/90 border border-purple-400/60 text-purple-100 px-3.5 py-1.5 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-2 text-xs font-bold animate-fadeIn">
@@ -647,6 +746,14 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           </div>
         </div>
       )}
+      </div>
+
+      {/* Bottom Player Captured Pieces Row */}
+      <CapturedPiecesRow
+        playerColor={bottomColor}
+        capturedPieces={bottomCapturedPieces}
+        materialAdvantage={bottomAdvantage}
+      />
     </div>
   );
 };
