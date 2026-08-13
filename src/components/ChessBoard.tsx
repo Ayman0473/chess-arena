@@ -375,7 +375,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             const piece = chess.get(square);
             const isSelected = selectedSquare === square;
             const isLegal = legalMoves.includes(square);
-            const isLastMoveSquare = lastMove && (lastMove.from === square || lastMove.to === square);
+            const isLastMoveFrom = lastMove && lastMove.from === square;
+            const isLastMoveTo = lastMove && lastMove.to === square;
+            const isLastMoveSquare = isLastMoveFrom || isLastMoveTo;
             const isKingCheck = kingSquareInCheck === square;
             const isDragOver = dragOverSquare === square;
 
@@ -391,16 +393,20 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 onDrop={(e) => handleDrop(e, square)}
                 className={`relative flex items-center justify-center cursor-pointer transition-colors ${
                   isLight ? 'bg-amber-100' : 'bg-emerald-800'
-                } ${isSelected ? 'bg-amber-300 ring-4 ring-amber-500 z-10' : ''} ${
-                  isDragOver && isLegal ? 'ring-4 ring-emerald-400 z-20 scale-[1.02]' : ''
-                } ${isLastMoveSquare ? 'bg-amber-400/50' : ''} ${
-                  isKingCheck ? 'bg-rose-600 animate-pulse' : ''
-                }`}
+                } ${isSelected ? 'bg-amber-300 ring-4 ring-amber-500 z-10 shadow-md' : ''} ${
+                  isDragOver && isLegal ? 'ring-4 ring-emerald-400 bg-emerald-400/40 z-20 scale-[1.02] shadow-xl' : ''
+                } ${
+                  isLastMoveFrom
+                    ? 'bg-amber-300/70 border-2 border-dashed border-amber-500/60'
+                    : isLastMoveTo
+                    ? 'bg-amber-400/80 ring-2 ring-amber-500/70 shadow-[inset_0_0_10px_rgba(245,158,11,0.5)] z-1'
+                    : ''
+                } ${isKingCheck ? 'bg-rose-600/90 ring-4 ring-rose-500 z-10 animate-pulse' : ''}`}
               >
                 {/* File / Rank Labels */}
                 {fIdx === 0 && (
                   <span
-                    className={`absolute top-0.5 left-1 text-[10px] font-bold ${
+                    className={`absolute top-0.5 left-1 text-[10px] font-bold z-10 ${
                       isLight ? 'text-emerald-900' : 'text-amber-100'
                     }`}
                   >
@@ -409,7 +415,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 )}
                 {rIdx === 7 && (
                   <span
-                    className={`absolute bottom-0.5 right-1 text-[10px] font-bold ${
+                    className={`absolute bottom-0.5 right-1 text-[10px] font-bold z-10 ${
                       isLight ? 'text-emerald-900' : 'text-amber-100'
                     }`}
                   >
@@ -417,12 +423,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   </span>
                 )}
 
-                {/* Legal Move Indicator */}
+                {/* Legal Move Indicator (Potential Destination Squares) */}
                 {isLegal && !piece && (
-                  <div className="w-3.5 h-3.5 rounded-full bg-slate-900/30 backdrop-blur-sm shadow-inner" />
+                  <div className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-slate-900/40 dark:bg-slate-950/60 ring-2 ring-emerald-400/50 shadow-md backdrop-blur-sm transition-transform hover:scale-125 z-10" />
                 )}
                 {isLegal && piece && (
-                  <div className="absolute inset-0 rounded-full border-4 border-rose-500/80 animate-ping" />
+                  <div className="absolute inset-0.5 rounded-lg border-4 border-rose-500/90 bg-rose-500/20 shadow-[0_0_12px_rgba(244,63,94,0.5)] pointer-events-none z-10 animate-pulse" />
                 )}
 
                 {/* Piece Render */}
