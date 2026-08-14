@@ -2,15 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { Chess, Square } from 'chess.js';
 import { PieceColor } from '../types';
 import { getCapturedPieces, getMaterialDifference } from '../lib/chessEngine';
-import { Zap, X } from 'lucide-react';
+import { Zap, X, History, Radio } from 'lucide-react';
 
 interface ChessBoardProps {
   fen: string;
   onMove: (from: string, to: string, promotion?: string) => void;
   turn: PieceColor;
   orientation?: PieceColor;
+  playerColor?: PieceColor;
   disabled?: boolean;
   lastMove?: { from: string; to: string } | null;
+  isHistoricalView?: boolean;
+  historicalMoveText?: string;
+  onReturnToLive?: () => void;
 }
 
 // SVG Vector rendering for standard Staunton Chess Pieces
@@ -294,8 +298,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   onMove,
   turn,
   orientation = 'w',
+  playerColor,
   disabled = false,
   lastMove,
+  isHistoricalView = false,
+  historicalMoveText,
+  onReturnToLive,
 }) => {
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
   const [legalMoves, setLegalMoves] = useState<string[]>([]);
@@ -307,8 +315,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const [premove, setPremove] = useState<{ from: Square; to: Square } | null>(null);
   const [premoveSource, setPremoveSource] = useState<Square | null>(null);
 
-  const playerColor = orientation || 'w';
-  const isMyTurn = turn === playerColor;
+  const activePlayerColor = playerColor || orientation || 'w';
+  const isMyTurn = turn === activePlayerColor;
 
   const chess = new Chess(fen);
   const isCheck = chess.inCheck();
@@ -328,17 +336,32 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     }
   }
 
-  // Calculate pseudo-legal candidate moves for a pre-move
+  // Calculate pseudo-legal candidate moves for a pre-move (strictly checking valid chess moves)
   const getPseudoLegalMovesForPremove = (currentFen: string, pColor: PieceColor, square: Square): string[] => {
     try {
       const parts = currentFen.split(' ');
       parts[1] = pColor;
+      parts[3] = '-'; // clear en-passant to avoid FEN parsing issues
       const simChess = new Chess(parts.join(' '));
       return simChess.moves({ square, verbose: true }).map((m) => m.to);
     } catch {
-      return [];
+      try {
+        const simChess = new Chess(currentFen);
+        return simChess.moves({ square, verbose: true }).map((m) => m.to);
+      } catch {
+        return [];
+      }
     }
   };
+
+  // Clear transient drag and selection states when position changes
+  useEffect(() => {
+    setSelectedSquare(null);
+    setLegalMoves([]);
+    setDraggedSquare(null);
+    setDragOverSquare(null);
+    setPremoveSource(null);
+  }, [fen]);
 
   // Auto-execute pending pre-move when turn switches back to active player
   useEffect(() => {
@@ -364,10 +387,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       setSelectedSquare(null);
       setLegalMoves([]);
     }
-  }, [fen, turn, playerColor, disabled]);
+  }, [fen, turn, isMyTurn, disabled]);
 
   const handleSquareClick = (square: Square) => {
-    if (disabled) return;
+    if (disabled || isHistoricalView) return;
 
     if (isMyTurn) {
       if (premove) {
@@ -411,7 +434,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         setLegalMoves([]);
       }
     } else {
-      // OPPONENT TURN -> PRE-MOVE LOGIC
+      // OPPONENT TURN -> STRICT PRE-MOVE LOGIC
       if (premove) {
         setPremove(null);
       }
@@ -420,25 +443,35 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
       if (premoveSource) {
         if (premoveSource === square) {
+          // Toggle deselect
           setPremoveSource(null);
           setLegalMoves([]);
           return;
         }
 
-        if (clickedPiece && clickedPiece.color === playerColor) {
+        // Only allow premove to highlighted candidate legal squares!
+        if (legalMoves.includes(square)) {
+          setPremove({ from: premoveSource, to: square });
+          setPremoveSource(null);
+          setLegalMoves([]);
+          return;
+        }
+
+        // If clicked on another piece of the player's color, switch selection
+        if (clickedPiece && clickedPiece.color === activePlayerColor) {
           setPremoveSource(square);
-          const pseudoMoves = getPseudoLegalMovesForPremove(fen, playerColor, square);
+          const pseudoMoves = getPseudoLegalMovesForPremove(fen, activePlayerColor, square);
           setLegalMoves(pseudoMoves);
           return;
         }
 
-        setPremove({ from: premoveSource, to: square });
+        // Invalid target (not in legal moves, e.g. pawn c2 to e8) -> Cancel selection
         setPremoveSource(null);
         setLegalMoves([]);
       } else {
-        if (clickedPiece && clickedPiece.color === playerColor) {
+        if (clickedPiece && clickedPiece.color === activePlayerColor) {
           setPremoveSource(square);
-          const pseudoMoves = getPseudoLegalMovesForPremove(fen, playerColor, square);
+          const pseudoMoves = getPseudoLegalMovesForPremove(fen, activePlayerColor, square);
           setLegalMoves(pseudoMoves);
         } else {
           setPremove(null);
@@ -450,7 +483,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   };
 
   const handleDragStart = (e: React.DragEvent, square: Square) => {
-    if (disabled) return;
+    if (disabled || isHistoricalView) return;
     const piece = chess.get(square);
     if (!piece) return;
 
@@ -461,10 +494,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       const moves = chess.moves({ square, verbose: true }).map((m) => m.to);
       setLegalMoves(moves);
     } else {
-      if (piece.color !== playerColor) return;
+      if (piece.color !== activePlayerColor) return;
       setDraggedSquare(square);
       setPremoveSource(square);
-      const pseudoMoves = getPseudoLegalMovesForPremove(fen, playerColor, square);
+      const pseudoMoves = getPseudoLegalMovesForPremove(fen, activePlayerColor, square);
       setLegalMoves(pseudoMoves);
     }
 
@@ -473,7 +506,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   };
 
   const handleDragOver = (e: React.DragEvent, square: Square) => {
-    if (disabled) return;
+    if (disabled || isHistoricalView) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (dragOverSquare !== square) {
@@ -488,7 +521,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   };
 
   const handleDrop = (e: React.DragEvent, targetSquare: Square) => {
-    if (disabled) return;
+    if (disabled || isHistoricalView) return;
     e.preventDefault();
     setDragOverSquare(null);
 
@@ -519,8 +552,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       setLegalMoves([]);
     } else {
       const piece = chess.get(fromSquare);
-      if (piece && piece.color === playerColor) {
-        setPremove({ from: fromSquare, to: targetSquare });
+      if (piece && piece.color === activePlayerColor) {
+        const pseudoMoves = getPseudoLegalMovesForPremove(fen, activePlayerColor, fromSquare);
+        // Strictly validate that the dropped square is a valid candidate move
+        if (pseudoMoves.includes(targetSquare)) {
+          setPremove({ from: fromSquare, to: targetSquare });
+        }
       }
       setDraggedSquare(null);
       setPremoveSource(null);
@@ -579,8 +616,28 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         }}
         className="relative select-none w-full max-w-[560px] aspect-square mx-auto rounded-2xl overflow-hidden shadow-2xl border-4 border-slate-800 bg-slate-900"
       >
+      {/* Floating Historical Review Banner */}
+      {isHistoricalView && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 bg-amber-950/95 border border-amber-400/80 text-amber-100 px-3.5 py-1.5 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-2 text-xs font-bold animate-fadeIn">
+          <History className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span className="truncate max-w-[160px] sm:max-w-none">
+            {historicalMoveText || 'Reviewing History'}
+          </span>
+          {onReturnToLive && (
+            <button
+              onClick={onReturnToLive}
+              className="ml-1 px-2 py-0.5 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[10px] uppercase tracking-wider flex items-center gap-1 shadow-sm transition-transform active:scale-95"
+              title="Return to live game position (Shortcut: Down Arrow ↓)"
+            >
+              <Radio className="w-2.5 h-2.5 animate-pulse" />
+              <span>Live (↓)</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Floating Pre-move Banner */}
-      {premove && (
+      {premove && !isHistoricalView && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 bg-purple-950/90 border border-purple-400/60 text-purple-100 px-3.5 py-1.5 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-2 text-xs font-bold animate-fadeIn">
           <Zap className="w-3.5 h-3.5 text-purple-400 fill-purple-400/30 animate-pulse shrink-0" />
           <span>
@@ -619,7 +676,10 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             const isDragOver = dragOverSquare === square;
 
             const pieceKey = piece ? `${piece.color}${piece.type.toUpperCase()}` : null;
-            const isDraggable = !disabled && (isMyTurn ? piece?.color === turn : piece?.color === playerColor);
+            const isDraggable =
+              !disabled &&
+              !isHistoricalView &&
+              (isMyTurn ? piece?.color === turn : piece?.color === playerColor);
 
             return (
               <div

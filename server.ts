@@ -492,15 +492,21 @@ async function startServer() {
           return;
         }
 
-        if (room.whitePlayer.id !== user.id && (!room.blackPlayer || room.blackPlayer.id === user.id)) {
+        if (!room.blackPlayer || room.blackPlayer.id === user.id || room.whitePlayer.id === user.id) {
+          const isSameUser = room.whitePlayer.id === user.id;
+          const blackId = isSameUser ? `${user.id}_black` : user.id;
+          const blackUsername = isSameUser ? `${user.username} (Black)` : user.username;
+
           room.blackPlayer = {
-            id: user.id,
-            username: user.username,
+            id: blackId,
+            username: blackUsername,
             elo: user.elo,
             avatarUrl: user.avatarUrl,
             isGuest: user.isGuest,
             connected: true,
           };
+          socketToUser.set(ws, blackId);
+          userToSocket.set(blackId, ws);
           room.status = 'active';
           room.lastMoveTimestamp = Date.now();
         }
@@ -742,6 +748,39 @@ async function startServer() {
         const room = activeRooms.get(msg.roomId);
         if (!room) return;
 
+        // In AI or Pass & Play (pvp_local) modes, immediately start the rematch without waiting for a request/accept cycle
+        if (room.mode === 'ai' || room.mode === 'pvp_local') {
+          const totalMs = room.timeControl.initialMinutes * 60 * 1000;
+          room.fen = new Chess().fen();
+          room.turn = 'w';
+          room.status = 'active';
+          room.winner = null;
+          room.winReason = undefined;
+          room.whiteTimeLeft = totalMs;
+          room.blackTimeLeft = totalMs;
+          room.lastMoveTimestamp = Date.now();
+          room.history = [];
+          room.lastMove = null;
+          room.drawOfferedBy = null;
+          room.rematchRequestedBy = null;
+          room.eloChange = undefined;
+
+          broadcastRoom(room.id, { type: 'ROOM_STATE', room });
+          broadcastRoom(room.id, {
+            type: 'CHAT_BROADCAST',
+            message: {
+              id: 'sys_' + Date.now(),
+              roomId: room.id,
+              senderId: 'system',
+              senderName: 'System',
+              message: 'Rematch started! Good luck.',
+              timestamp: Date.now(),
+              isSystem: true,
+            },
+          });
+          break;
+        }
+
         const color: PieceColor = room.whitePlayer.id === userId ? 'w' : 'b';
         room.rematchRequestedBy = color;
 
@@ -822,34 +861,54 @@ async function startServer() {
   function executeAIMove(room: GameRoom) {
     if (room.status !== 'active') return;
 
-    const chess = new Chess(room.fen);
-    const move = getAIMove(room.fen, room.aiDifficulty || 'medium');
+    try {
+      const chess = new Chess(room.fen);
+      const move = getAIMove(room.fen, room.aiDifficulty || 'medium');
 
-    if (move) {
-      chess.move(move);
+      if (move) {
+        const result = chess.move({
+          from: move.from,
+          to: move.to,
+          promotion: move.promotion || 'q',
+        });
 
-      const moveRecord = {
-        moveNumber: Math.floor(room.history.length / 2) + 1,
-        san: move.san,
-        from: move.from,
-        to: move.to,
-        piece: move.piece,
-        color: move.color,
-        fen: chess.fen(),
-        captured: move.captured,
-        timeRemaining: room.blackTimeLeft,
-      };
+        if (!result) {
+          console.error('Failed to execute AI move:', move);
+          return;
+        }
 
-      room.history.push(moveRecord);
-      room.fen = chess.fen();
-      room.turn = chess.turn();
-      room.lastMove = { from: move.from, to: move.to, san: move.san };
+        const now = Date.now();
+        if (room.lastMoveTimestamp) {
+          const elapsed = now - room.lastMoveTimestamp;
+          room.blackTimeLeft = Math.max(0, room.blackTimeLeft - elapsed + room.timeControl.incrementSeconds * 1000);
+        }
+        room.lastMoveTimestamp = now;
 
-      if (chess.isGameOver()) {
-        handleGameOver(room, chess);
+        const moveRecord = {
+          moveNumber: Math.floor(room.history.length / 2) + 1,
+          san: result.san,
+          from: result.from,
+          to: result.to,
+          piece: result.piece,
+          color: result.color,
+          fen: chess.fen(),
+          captured: result.captured,
+          timeRemaining: room.blackTimeLeft,
+        };
+
+        room.history.push(moveRecord);
+        room.fen = chess.fen();
+        room.turn = chess.turn();
+        room.lastMove = { from: result.from, to: result.to, san: result.san };
+
+        if (chess.isGameOver()) {
+          handleGameOver(room, chess);
+        }
+
+        broadcastRoom(room.id, { type: 'ROOM_STATE', room });
       }
-
-      broadcastRoom(room.id, { type: 'ROOM_STATE', room });
+    } catch (err) {
+      console.error('Error in executeAIMove:', err);
     }
   }
 

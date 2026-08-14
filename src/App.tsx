@@ -244,6 +244,56 @@ export default function App() {
     setIsSpectator(false);
     setRoom(null);
     setChatMessages([]);
+    setViewingMoveIndex(null);
+    setConfirmResign(false);
+  };
+
+  // Move History Navigation State
+  const [viewingMoveIndex, setViewingMoveIndex] = useState<number | null>(null);
+  const [confirmResign, setConfirmResign] = useState(false);
+
+  // Reset viewing index when room changes or rematch restarts
+  useEffect(() => {
+    setViewingMoveIndex(null);
+    setConfirmResign(false);
+  }, [room?.id, room?.status]);
+
+  // History Navigation Helpers
+  const handlePrevMove = () => {
+    if (!room || room.history.length === 0) return;
+    setViewingMoveIndex((curr) => {
+      if (curr === null) {
+        return room.history.length >= 2 ? room.history.length - 2 : -1;
+      }
+      if (curr > -1) {
+        return curr - 1;
+      }
+      return -1;
+    });
+  };
+
+  const handleNextMove = () => {
+    if (!room || room.history.length === 0) return;
+    setViewingMoveIndex((curr) => {
+      if (curr === null) return null;
+      if (curr < room.history.length - 1) {
+        return curr + 1;
+      }
+      return null; // Return to live position
+    });
+  };
+
+  const handleFirstMove = () => {
+    if (!room || room.history.length === 0) return;
+    setViewingMoveIndex(-1);
+  };
+
+  const handleLastMove = () => {
+    setViewingMoveIndex(null);
+  };
+
+  const handleSelectMoveIndex = (index: number | null) => {
+    setViewingMoveIndex(index);
   };
 
   // Determine Player Color for Current User
@@ -254,7 +304,120 @@ export default function App() {
     }
   }
 
-  const isMyTurn = room ? room.turn === userColor : false;
+  // Active interaction player color for the chessboard (in local mode, whoever's turn it is can move)
+  const boardPlayerColor: PieceColor =
+    room?.mode === 'pvp_local' ? (room.turn as PieceColor) : userColor;
+
+  const isMyTurn = room ? (room.mode === 'pvp_local' ? true : room.turn === userColor) : false;
+
+  // Compute displayed board state (live or historical position)
+  const isHistoricalView =
+    viewingMoveIndex !== null &&
+    (viewingMoveIndex === -1 || viewingMoveIndex < (room?.history.length ?? 0) - 1);
+
+  let displayedFen = room?.fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  let displayedLastMove: { from: string; to: string } | null = room?.lastMove || null;
+  let displayedTurn = room?.turn || 'w';
+  let historicalMoveText = '';
+
+  if (room && viewingMoveIndex !== null) {
+    if (viewingMoveIndex === -1) {
+      displayedFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+      displayedLastMove = null;
+      displayedTurn = 'w';
+      historicalMoveText = 'Starting Position';
+    } else if (viewingMoveIndex >= 0 && viewingMoveIndex < room.history.length) {
+      const rec = room.history[viewingMoveIndex];
+      displayedFen = rec.fen;
+      displayedLastMove = { from: rec.from, to: rec.to };
+      displayedTurn = rec.color === 'w' ? 'b' : 'w';
+      historicalMoveText = `Move ${viewingMoveIndex + 1}/${room.history.length} (${rec.color === 'w' ? 'White' : 'Black'}: ${rec.san})`;
+    }
+  }
+
+  // Global Keyboard Shortcuts Listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Ignore keystrokes when typing in inputs/textareas
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      // If Auth modal is open, do not trigger shortcuts
+      if (isAuthOpen) return;
+
+      // Shortcuts only operate within a Game Room
+      if (!room) return;
+
+      // History navigation: Left/Right/Up/Down Arrow Keys
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handlePrevMove();
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleNextMove();
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        handleFirstMove();
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        handleLastMove();
+        return;
+      }
+
+      // Action Shortcuts (R: Resign, D: Draw) - only active for players in active game
+      if (isSpectator || room.status !== 'active') return;
+
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        if (!confirmResign) {
+          setConfirmResign(true);
+        } else {
+          handleResign();
+          setConfirmResign(false);
+        }
+        return;
+      }
+
+      if (e.key === 'd' || e.key === 'D') {
+        e.preventDefault();
+        if (room.drawOfferedBy) {
+          if (room.mode === 'pvp_local' || room.drawOfferedBy !== userColor) {
+            handleRespondDraw(true);
+          }
+        } else {
+          handleOfferDraw();
+        }
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        if (confirmResign) {
+          setConfirmResign(false);
+        } else if (viewingMoveIndex !== null) {
+          setViewingMoveIndex(null);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [room, isSpectator, userColor, confirmResign, viewingMoveIndex, isAuthOpen]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
@@ -356,6 +519,7 @@ export default function App() {
                     {/* Opponent Clock */}
                     {userColor === 'w' ? (
                       <GameClock
+                        key={`opponent-clock-black-${room.id}`}
                         player={
                           room.blackPlayer || {
                             username: 'Waiting for opponent...',
@@ -370,6 +534,7 @@ export default function App() {
                       />
                     ) : (
                       <GameClock
+                        key={`opponent-clock-white-${room.id}`}
                         player={room.whitePlayer}
                         color="w"
                         timeLeft={room.whiteTimeLeft}
@@ -381,7 +546,7 @@ export default function App() {
                     {/* Move Notation & Actions */}
                     <MoveHistory
                       history={room.history}
-                      fen={room.fen}
+                      fen={displayedFen}
                       roomMode={room.mode}
                       onOfferDraw={!isSpectator && room.status === 'active' ? handleOfferDraw : undefined}
                       onRespondDraw={!isSpectator && room.status === 'active' ? handleRespondDraw : undefined}
@@ -390,18 +555,30 @@ export default function App() {
                       userColor={userColor}
                       currentTurnColor={room.turn}
                       disabled={isSpectator || room.status !== 'active'}
+                      viewingMoveIndex={viewingMoveIndex}
+                      onSelectMoveIndex={handleSelectMoveIndex}
+                      onPrevMove={handlePrevMove}
+                      onNextMove={handleNextMove}
+                      onFirstMove={handleFirstMove}
+                      onLastMove={handleLastMove}
+                      confirmResign={confirmResign}
+                      setConfirmResign={setConfirmResign}
                     />
                   </div>
 
                   {/* Center Column: Interactive Chess Board */}
                   <div className="lg:col-span-6 space-y-4 order-1 lg:order-2 flex flex-col items-center">
                     <ChessBoard
-                      fen={room.fen}
+                      fen={displayedFen}
                       onMove={handleMove}
-                      turn={room.turn}
+                      turn={displayedTurn}
                       orientation={userColor}
+                      playerColor={boardPlayerColor}
                       disabled={isSpectator || room.status !== 'active'}
-                      lastMove={room.lastMove}
+                      lastMove={displayedLastMove}
+                      isHistoricalView={isHistoricalView}
+                      historicalMoveText={historicalMoveText}
+                      onReturnToLive={handleLastMove}
                     />
                   </div>
 
@@ -410,6 +587,7 @@ export default function App() {
                     {/* Active Player Clock */}
                     {userColor === 'w' ? (
                       <GameClock
+                        key={`player-clock-white-${room.id}`}
                         player={room.whitePlayer}
                         color="w"
                         timeLeft={room.whiteTimeLeft}
@@ -418,6 +596,7 @@ export default function App() {
                       />
                     ) : (
                       <GameClock
+                        key={`player-clock-black-${room.id}`}
                         player={
                           room.blackPlayer || {
                             username: 'Player 2',

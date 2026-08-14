@@ -80,47 +80,60 @@ export function getAIMove(
   fen: string,
   difficulty: 'easy' | 'medium' | 'hard' = 'medium'
 ): Move | null {
-  const chess = new Chess(fen);
-  const moves = chess.moves({ verbose: true });
+  try {
+    const chess = new Chess(fen);
+    const moves = chess.moves({ verbose: true });
 
-  if (moves.length === 0) return null;
+    if (moves.length === 0) return null;
 
-  // Easy AI: 80% random move, 20% simple capture
-  if (difficulty === 'easy') {
-    const captures = moves.filter((m) => m.captured);
-    if (captures.length > 0 && Math.random() < 0.3) {
-      return captures[Math.floor(Math.random() * captures.length)];
+    // Easy AI: 80% random move, 20% simple capture
+    if (difficulty === 'easy') {
+      const captures = moves.filter((m) => m.captured);
+      if (captures.length > 0 && Math.random() < 0.3) {
+        return captures[Math.floor(Math.random() * captures.length)];
+      }
+      return moves[Math.floor(Math.random() * moves.length)];
     }
-    return moves[Math.floor(Math.random() * moves.length)];
-  }
 
-  // Medium AI: Minimax depth 2 with material evaluation
-  if (difficulty === 'medium') {
-    let bestMove: Move | null = null;
-    let bestScore = chess.turn() === 'w' ? -Infinity : Infinity;
+    const isBotWhite = chess.turn() === 'w';
 
-    for (const move of moves) {
-      chess.move(move);
-      const val = evaluateBoard(chess);
-      chess.undo();
+    // Medium AI: Minimax depth 2 with material evaluation
+    if (difficulty === 'medium') {
+      let bestMove: Move | null = null;
+      let bestScore = isBotWhite ? -Infinity : Infinity;
 
-      if (chess.turn() === 'w') {
-        if (val > bestScore) {
-          bestScore = val;
-          bestMove = move;
-        }
-      } else {
-        if (val < bestScore) {
-          bestScore = val;
-          bestMove = move;
+      for (const move of moves) {
+        chess.move({ from: move.from, to: move.to, promotion: move.promotion || 'q' });
+        const val = evaluateBoard(chess);
+        chess.undo();
+
+        if (isBotWhite) {
+          if (val > bestScore) {
+            bestScore = val;
+            bestMove = move;
+          }
+        } else {
+          if (val < bestScore) {
+            bestScore = val;
+            bestMove = move;
+          }
         }
       }
+      return bestMove || moves[Math.floor(Math.random() * moves.length)];
     }
-    return bestMove || moves[Math.floor(Math.random() * moves.length)];
-  }
 
-  // Hard AI: Minimax depth 3 with Alpha-Beta pruning
-  return minimaxRoot(chess, 3, chess.turn() === 'w') || moves[Math.floor(Math.random() * moves.length)];
+    // Hard AI: Minimax depth 3 with Alpha-Beta pruning
+    return minimaxRoot(chess, 3, isBotWhite) || moves[Math.floor(Math.random() * moves.length)];
+  } catch (err) {
+    console.error('Error generating AI move:', err);
+    try {
+      const fallbackChess = new Chess(fen);
+      const fallbackMoves = fallbackChess.moves({ verbose: true });
+      return fallbackMoves.length > 0 ? fallbackMoves[0] : null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 function minimaxRoot(chess: Chess, depth: number, isMaximizing: boolean): Move | null {
@@ -134,7 +147,7 @@ function minimaxRoot(chess: Chess, depth: number, isMaximizing: boolean): Move |
   moves.sort((a, b) => (b.captured ? 10 : 0) - (a.captured ? 10 : 0));
 
   for (const move of moves) {
-    chess.move(move);
+    chess.move({ from: move.from, to: move.to, promotion: move.promotion || 'q' });
     const value = minimax(chess, depth - 1, -Infinity, Infinity, !isMaximizing);
     chess.undo();
 
@@ -170,7 +183,7 @@ function minimax(
   if (isMaximizing) {
     let maxEval = -Infinity;
     for (const move of moves) {
-      chess.move(move);
+      chess.move({ from: move.from, to: move.to, promotion: move.promotion || 'q' });
       const evalVal = minimax(chess, depth - 1, alpha, beta, false);
       chess.undo();
       maxEval = Math.max(maxEval, evalVal);
@@ -181,7 +194,7 @@ function minimax(
   } else {
     let minEval = Infinity;
     for (const move of moves) {
-      chess.move(move);
+      chess.move({ from: move.from, to: move.to, promotion: move.promotion || 'q' });
       const evalVal = minimax(chess, depth - 1, alpha, beta, true);
       chess.undo();
       minEval = Math.min(minEval, evalVal);

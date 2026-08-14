@@ -22,26 +22,25 @@ export const GameClock: React.FC<GameClockProps> = ({
   isTurn,
 }) => {
   const [displayTime, setDisplayTime] = useState(timeLeft);
-  const startTimeRef = useRef<number>(Date.now());
-  const initialTimeRef = useRef<number>(timeLeft);
 
-  // Sync state whenever props update from server
+  // Sync state whenever timeLeft updates from server or turn changes
   useEffect(() => {
     setDisplayTime(timeLeft);
-    startTimeRef.current = Date.now();
-    initialTimeRef.current = timeLeft;
-  }, [timeLeft, isTurn, isActive]);
+  }, [timeLeft]);
 
   // Continuously count down when game is active and it's this player's turn
   useEffect(() => {
-    if (!isActive || !isTurn) return;
+    if (!isActive || !isTurn) {
+      setDisplayTime(timeLeft);
+      return;
+    }
 
-    startTimeRef.current = Date.now();
-    initialTimeRef.current = displayTime;
+    const startTimestamp = Date.now();
+    const baseTime = timeLeft;
 
     const interval = setInterval(() => {
-      const elapsed = Date.now() - startTimeRef.current;
-      const remaining = Math.max(0, initialTimeRef.current - elapsed);
+      const elapsed = Date.now() - startTimestamp;
+      const remaining = Math.max(0, baseTime - elapsed);
       setDisplayTime(remaining);
 
       if (remaining <= 0) {
@@ -50,7 +49,7 @@ export const GameClock: React.FC<GameClockProps> = ({
     }, 100);
 
     return () => clearInterval(interval);
-  }, [isActive, isTurn]);
+  }, [isActive, isTurn, timeLeft]);
 
   const totalSeconds = Math.max(0, Math.floor(displayTime / 1000));
   const minutes = Math.floor(totalSeconds / 60);
