@@ -22,6 +22,7 @@ import { RuleGuideModal } from './components/RuleGuideModal';
 import { BoardThemePicker } from './components/BoardThemePicker';
 import { sounds } from './lib/audio';
 import { getStoredBoardTheme, saveStoredBoardTheme, BOARD_THEMES } from './lib/themes';
+import { getCapturedPieces, getMaterialDifference } from './lib/chessEngine';
 import { Trophy, Swords, RotateCcw, Home, Sparkles, Handshake, Flag, Eye, Radio, Palette } from 'lucide-react';
 
 export default function App() {
@@ -570,114 +571,129 @@ export default function App() {
                   )}
                 </div>
 
-                {/* 3-Column Responsive Game Workspace */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                  {/* Left Column: Opponent Clock & Move Notation */}
-                  <div className="lg:col-span-3 space-y-4 order-2 lg:order-1">
-                    {/* Opponent Clock */}
-                    {userColor === 'w' ? (
-                      <GameClock
-                        key={`opponent-clock-black-${room.id}`}
-                        player={
-                          room.blackPlayer || {
-                            username: 'Waiting for opponent...',
-                            elo: 1200,
-                            avatarUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=waiting',
-                          }
-                        }
-                        color="b"
-                        timeLeft={room.blackTimeLeft}
-                        isActive={room.status === 'active'}
-                        isTurn={room.turn === 'b'}
-                      />
-                    ) : (
-                      <GameClock
-                        key={`opponent-clock-white-${room.id}`}
-                        player={room.whitePlayer}
-                        color="w"
-                        timeLeft={room.whiteTimeLeft}
-                        isActive={room.status === 'active'}
-                        isTurn={room.turn === 'w'}
-                      />
-                    )}
+                {/* Calculate Material Difference & Captured Pieces for Clocks */}
+                {(() => {
+                  const { whiteCaptured, blackCaptured } = getCapturedPieces(displayedFen);
+                  const { whiteDiff, blackDiff } = getMaterialDifference(displayedFen);
 
-                    {/* Move Notation & Actions */}
-                    <MoveHistory
-                      history={room.history}
-                      fen={displayedFen}
-                      roomMode={room.mode}
-                      onOfferDraw={!isSpectator && room.status === 'active' ? handleOfferDraw : undefined}
-                      onRespondDraw={!isSpectator && room.status === 'active' ? handleRespondDraw : undefined}
-                      onResign={!isSpectator && room.status === 'active' ? handleResign : undefined}
-                      drawOfferedBy={room.drawOfferedBy}
-                      userColor={userColor}
-                      currentTurnColor={room.turn}
-                      disabled={isSpectator || room.status !== 'active'}
-                      viewingMoveIndex={viewingMoveIndex}
-                      onSelectMoveIndex={handleSelectMoveIndex}
-                      onPrevMove={handlePrevMove}
-                      onNextMove={handleNextMove}
-                      onFirstMove={handleFirstMove}
-                      onLastMove={handleLastMove}
-                      confirmResign={confirmResign}
-                      setConfirmResign={setConfirmResign}
-                    />
-                  </div>
+                  return (
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                      {/* Left Column: Opponent Clock & Move Notation */}
+                      <div className="lg:col-span-3 space-y-4 order-2 lg:order-1">
+                        {/* Opponent Clock */}
+                        {userColor === 'w' ? (
+                          <GameClock
+                            key={`opponent-clock-black-${room.id}`}
+                            player={
+                              room.blackPlayer || {
+                                username: 'Waiting for opponent...',
+                                elo: 1200,
+                                avatarUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=waiting',
+                              }
+                            }
+                            color="b"
+                            timeLeft={room.blackTimeLeft}
+                            isActive={room.status === 'active'}
+                            isTurn={room.turn === 'b'}
+                            capturedPieces={blackCaptured}
+                            materialAdvantage={blackDiff}
+                          />
+                        ) : (
+                          <GameClock
+                            key={`opponent-clock-white-${room.id}`}
+                            player={room.whitePlayer}
+                            color="w"
+                            timeLeft={room.whiteTimeLeft}
+                            isActive={room.status === 'active'}
+                            isTurn={room.turn === 'w'}
+                            capturedPieces={whiteCaptured}
+                            materialAdvantage={whiteDiff}
+                          />
+                        )}
 
-                  {/* Center Column: Interactive Chess Board */}
-                  <div className="lg:col-span-6 space-y-4 order-1 lg:order-2 flex flex-col items-center">
-                    <ChessBoard
-                      fen={displayedFen}
-                      onMove={handleMove}
-                      turn={displayedTurn}
-                      orientation={userColor}
-                      playerColor={boardPlayerColor}
-                      themeId={boardTheme}
-                      disabled={isSpectator || room.status !== 'active'}
-                      lastMove={displayedLastMove}
-                      isHistoricalView={isHistoricalView}
-                      historicalMoveText={historicalMoveText}
-                      onReturnToLive={handleLastMove}
-                    />
-                  </div>
+                        {/* Move Notation & Actions */}
+                        <MoveHistory
+                          history={room.history}
+                          fen={displayedFen}
+                          roomMode={room.mode}
+                          onOfferDraw={!isSpectator && room.status === 'active' ? handleOfferDraw : undefined}
+                          onRespondDraw={!isSpectator && room.status === 'active' ? handleRespondDraw : undefined}
+                          onResign={!isSpectator && room.status === 'active' ? handleResign : undefined}
+                          drawOfferedBy={room.drawOfferedBy}
+                          userColor={userColor}
+                          currentTurnColor={room.turn}
+                          disabled={isSpectator || room.status !== 'active'}
+                          viewingMoveIndex={viewingMoveIndex}
+                          onSelectMoveIndex={handleSelectMoveIndex}
+                          onPrevMove={handlePrevMove}
+                          onNextMove={handleNextMove}
+                          onFirstMove={handleFirstMove}
+                          onLastMove={handleLastMove}
+                          confirmResign={confirmResign}
+                          setConfirmResign={setConfirmResign}
+                        />
+                      </div>
 
-                  {/* Right Column: Player Clock & Real-time Chat */}
-                  <div className="lg:col-span-3 space-y-4 order-3 lg:order-3">
-                    {/* Active Player Clock */}
-                    {userColor === 'w' ? (
-                      <GameClock
-                        key={`player-clock-white-${room.id}`}
-                        player={room.whitePlayer}
-                        color="w"
-                        timeLeft={room.whiteTimeLeft}
-                        isActive={room.status === 'active'}
-                        isTurn={room.turn === 'w'}
-                      />
-                    ) : (
-                      <GameClock
-                        key={`player-clock-black-${room.id}`}
-                        player={
-                          room.blackPlayer || {
-                            username: 'Player 2',
-                            elo: 1200,
-                            avatarUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=p2',
-                          }
-                        }
-                        color="b"
-                        timeLeft={room.blackTimeLeft}
-                        isActive={room.status === 'active'}
-                        isTurn={room.turn === 'b'}
-                      />
-                    )}
+                      {/* Center Column: Interactive Chess Board */}
+                      <div className="lg:col-span-6 space-y-4 order-1 lg:order-2 flex flex-col items-center">
+                        <ChessBoard
+                          fen={displayedFen}
+                          onMove={handleMove}
+                          turn={displayedTurn}
+                          orientation={userColor}
+                          playerColor={boardPlayerColor}
+                          themeId={boardTheme}
+                          disabled={isSpectator || room.status !== 'active'}
+                          lastMove={displayedLastMove}
+                          isHistoricalView={isHistoricalView}
+                          historicalMoveText={historicalMoveText}
+                          onReturnToLive={handleLastMove}
+                        />
+                      </div>
 
-                    {/* Live Chat Component */}
-                    <ChatBox
-                      messages={chatMessages}
-                      onSendMessage={handleSendMessage}
-                      currentUser={user}
-                    />
-                  </div>
-                </div>
+                      {/* Right Column: Player Clock & Real-time Chat */}
+                      <div className="lg:col-span-3 space-y-4 order-3 lg:order-3">
+                        {/* Active Player Clock */}
+                        {userColor === 'w' ? (
+                          <GameClock
+                            key={`player-clock-white-${room.id}`}
+                            player={room.whitePlayer}
+                            color="w"
+                            timeLeft={room.whiteTimeLeft}
+                            isActive={room.status === 'active'}
+                            isTurn={room.turn === 'w'}
+                            capturedPieces={whiteCaptured}
+                            materialAdvantage={whiteDiff}
+                          />
+                        ) : (
+                          <GameClock
+                            key={`player-clock-black-${room.id}`}
+                            player={
+                              room.blackPlayer || {
+                                username: 'Player 2',
+                                elo: 1200,
+                                avatarUrl: 'https://api.dicebear.com/7.x/identicon/svg?seed=p2',
+                              }
+                            }
+                            color="b"
+                            timeLeft={room.blackTimeLeft}
+                            isActive={room.status === 'active'}
+                            isTurn={room.turn === 'b'}
+                            capturedPieces={blackCaptured}
+                            materialAdvantage={blackDiff}
+                          />
+                        )}
+
+                        {/* Live Chat Component */}
+                        <ChatBox
+                          messages={chatMessages}
+                          onSendMessage={handleSendMessage}
+                          currentUser={user}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Game Over Modal / Result Banner */}
                 {room.status !== 'active' && room.status !== 'waiting' && (
