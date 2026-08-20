@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, TimeControl, GameRoom } from '../types';
+import { UserProfile, TimeControl, GameRoom, BoardThemeId } from '../types';
+import { BoardThemePicker } from './BoardThemePicker';
 import { Swords, Bot, Users, Key, Zap, Clock, ShieldCheck, Loader2, Eye, Radio, RefreshCw } from 'lucide-react';
 
 interface LobbyProps {
   user: UserProfile | null;
+  currentTheme: BoardThemeId;
+  onSelectTheme: (theme: BoardThemeId) => void;
   onJoinQueue: (tc: TimeControl, isRated: boolean) => void;
   onLeaveQueue: () => void;
   onCreateRoom: (mode: 'pvp_online' | 'pvp_local' | 'ai', tc: TimeControl, aiDifficulty?: 'easy' | 'medium' | 'hard', isRated?: boolean) => void;
@@ -24,6 +27,8 @@ const PRESET_TIME_CONTROLS: TimeControl[] = [
 
 export const Lobby: React.FC<LobbyProps> = ({
   user,
+  currentTheme,
+  onSelectTheme,
   onJoinQueue,
   onLeaveQueue,
   onCreateRoom,
@@ -264,6 +269,15 @@ export const Lobby: React.FC<LobbyProps> = ({
             </button>
           </div>
         )}
+
+        {/* Board Theme Customization */}
+        <div className="pt-3 border-t border-slate-800">
+          <BoardThemePicker
+            currentTheme={currentTheme}
+            onSelectTheme={onSelectTheme}
+            variant="panel"
+          />
+        </div>
 
         {/* Queue / Action Launch Button */}
         <div className="pt-4 border-t border-slate-800">

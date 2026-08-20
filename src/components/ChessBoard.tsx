@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Chess, Square } from 'chess.js';
-import { PieceColor } from '../types';
+import { PieceColor, BoardThemeId } from '../types';
 import { getCapturedPieces, getMaterialDifference } from '../lib/chessEngine';
+import { BOARD_THEMES } from '../lib/themes';
 import { Zap, X, History, Radio } from 'lucide-react';
 
 interface ChessBoardProps {
@@ -10,6 +11,7 @@ interface ChessBoardProps {
   turn: PieceColor;
   orientation?: PieceColor;
   playerColor?: PieceColor;
+  themeId?: BoardThemeId;
   disabled?: boolean;
   lastMove?: { from: string; to: string } | null;
   isHistoricalView?: boolean;
@@ -299,12 +301,14 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   turn,
   orientation = 'w',
   playerColor,
+  themeId = 'forest',
   disabled = false,
   lastMove,
   isHistoricalView = false,
   historicalMoveText,
   onReturnToLive,
 }) => {
+  const activeTheme = BOARD_THEMES[themeId] || BOARD_THEMES.forest;
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
   const [legalMoves, setLegalMoves] = useState<string[]>([]);
   const [pendingPromotion, setPendingPromotion] = useState<{ from: Square; to: Square } | null>(null);
@@ -614,7 +618,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
           setSelectedSquare(null);
           setLegalMoves([]);
         }}
-        className="relative select-none w-full max-w-[560px] aspect-square mx-auto rounded-2xl overflow-hidden shadow-2xl border-4 border-slate-800 bg-slate-900"
+        className="relative select-none w-full max-w-[560px] aspect-square mx-auto rounded-2xl overflow-hidden shadow-2xl border-4 bg-slate-900"
+        style={{ borderColor: activeTheme.borderColor }}
       >
       {/* Floating Historical Review Banner */}
       {isHistoricalView && (
@@ -684,53 +689,57 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             return (
               <div
                 key={square}
+                id={`square-${square}`}
                 onClick={() => handleSquareClick(square)}
                 onDragOver={(e) => handleDragOver(e, square)}
                 onDragLeave={(e) => handleDragLeave(e, square)}
                 onDrop={(e) => handleDrop(e, square)}
+                style={{
+                  backgroundColor: isLight ? activeTheme.lightTile : activeTheme.darkTile,
+                }}
                 className={`relative flex items-center justify-center cursor-pointer transition-colors ${
-                  isLight ? 'bg-amber-100' : 'bg-emerald-800'
-                } ${
                   isSelected
                     ? isMyTurn
-                      ? 'bg-amber-300 ring-4 ring-amber-500 z-10 shadow-md'
-                      : 'bg-purple-400/80 ring-4 ring-purple-500 z-10 shadow-md'
+                      ? 'ring-4 ring-amber-500 z-10 shadow-md !bg-amber-300'
+                      : 'ring-4 ring-purple-500 z-10 shadow-md !bg-purple-400/90'
                     : ''
                 } ${
                   isPremoveFrom
-                    ? 'bg-purple-600/70 border-2 border-dashed border-purple-300 ring-2 ring-purple-400 z-10'
+                    ? 'border-2 border-dashed border-purple-300 ring-2 ring-purple-400 z-10 !bg-purple-600/80'
                     : isPremoveTo
-                    ? 'bg-purple-500/80 ring-4 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.7)] z-10'
+                    ? 'ring-4 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.7)] z-10 !bg-purple-500/90'
                     : ''
                 } ${
                   isDragOver && isLegal
                     ? isMyTurn
-                      ? 'ring-4 ring-emerald-400 bg-emerald-400/40 z-20 scale-[1.02] shadow-xl'
-                      : 'ring-4 ring-purple-400 bg-purple-400/40 z-20 scale-[1.02] shadow-xl'
+                      ? 'ring-4 ring-emerald-400 !bg-emerald-400/50 z-20 scale-[1.02] shadow-xl'
+                      : 'ring-4 ring-purple-400 !bg-purple-400/50 z-20 scale-[1.02] shadow-xl'
                     : ''
                 } ${
                   isLastMoveFrom
-                    ? 'bg-amber-300/70 border-2 border-dashed border-amber-500/60'
+                    ? 'border-2 border-dashed border-amber-500/80 !bg-amber-300/60'
                     : isLastMoveTo
-                    ? 'bg-amber-400/80 ring-2 ring-amber-500/70 shadow-[inset_0_0_10px_rgba(245,158,11,0.5)] z-1'
+                    ? 'ring-2 ring-amber-500/80 shadow-[inset_0_0_10px_rgba(245,158,11,0.5)] z-1 !bg-amber-400/75'
                     : ''
-                } ${isKingCheck ? 'bg-rose-600/90 ring-4 ring-rose-500 z-10 animate-pulse' : ''}`}
+                } ${isKingCheck ? '!bg-rose-600/90 ring-4 ring-rose-500 z-10 animate-pulse' : ''}`}
               >
                 {/* File / Rank Labels */}
                 {fIdx === 0 && (
                   <span
-                    className={`absolute top-0.5 left-1 text-[10px] font-bold z-10 ${
-                      isLight ? 'text-emerald-900' : 'text-amber-100'
-                    }`}
+                    style={{
+                      color: isLight ? activeTheme.lightLabel : activeTheme.darkLabel,
+                    }}
+                    className="absolute top-0.5 left-1 text-[10px] font-bold z-10 select-none opacity-90"
                   >
                     {rank}
                   </span>
                 )}
                 {rIdx === 7 && (
                   <span
-                    className={`absolute bottom-0.5 right-1 text-[10px] font-bold z-10 ${
-                      isLight ? 'text-emerald-900' : 'text-amber-100'
-                    }`}
+                    style={{
+                      color: isLight ? activeTheme.lightLabel : activeTheme.darkLabel,
+                    }}
+                    className="absolute bottom-0.5 right-1 text-[10px] font-bold z-10 select-none opacity-90"
                   >
                     {file}
                   </span>

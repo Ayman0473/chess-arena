@@ -1,3 +1,16 @@
+export type BoardThemeId = 'classic' | 'forest' | 'ocean' | 'midnight' | 'coral' | 'amethyst';
+
+export interface BoardTheme {
+  id: BoardThemeId;
+  name: string;
+  lightTile: string;
+  darkTile: string;
+  lightLabel: string;
+  darkLabel: string;
+  borderColor: string;
+  tagline: string;
+}
+
 export type TimeControlCategory = 'bullet' | 'blitz' | 'rapid' | 'custom';
 
 export interface TimeControl {

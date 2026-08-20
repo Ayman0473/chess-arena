@@ -7,6 +7,7 @@ import {
   WSServerMessage,
   TimeControl,
   PieceColor,
+  BoardThemeId,
 } from './types';
 import { Navbar } from './components/Navbar';
 import { Lobby } from './components/Lobby';
@@ -18,14 +19,23 @@ import { Leaderboard } from './components/Leaderboard';
 import { MatchHistory } from './components/MatchHistory';
 import { AuthModal } from './components/AuthModal';
 import { RuleGuideModal } from './components/RuleGuideModal';
+import { BoardThemePicker } from './components/BoardThemePicker';
 import { sounds } from './lib/audio';
-import { Trophy, Swords, RotateCcw, Home, Sparkles, Handshake, Flag, Eye, Radio } from 'lucide-react';
+import { getStoredBoardTheme, saveStoredBoardTheme, BOARD_THEMES } from './lib/themes';
+import { Trophy, Swords, RotateCcw, Home, Sparkles, Handshake, Flag, Eye, Radio, Palette } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [activeTab, setActiveTab] = useState<'play' | 'leaderboard' | 'history' | 'guide'>('play');
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [boardTheme, setBoardTheme] = useState<BoardThemeId>(getStoredBoardTheme());
+  const [showInGameThemePicker, setShowInGameThemePicker] = useState(false);
+
+  const handleSelectTheme = (themeId: BoardThemeId) => {
+    setBoardTheme(themeId);
+    saveStoredBoardTheme(themeId);
+  };
 
   // Active Game State
   const [room, setRoom] = useState<GameRoom | null>(null);
@@ -426,6 +436,8 @@ export default function App() {
         user={user}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        currentTheme={boardTheme}
+        onSelectTheme={handleSelectTheme}
         onOpenAuth={() => setIsAuthOpen(true)}
         onLogout={handleLogout}
         isMuted={isMuted}
@@ -443,6 +455,8 @@ export default function App() {
             {!room ? (
               <Lobby
                 user={user}
+                currentTheme={boardTheme}
+                onSelectTheme={handleSelectTheme}
                 onJoinQueue={handleJoinQueue}
                 onLeaveQueue={handleLeaveQueue}
                 onCreateRoom={handleCreateRoom}
@@ -455,7 +469,7 @@ export default function App() {
             ) : (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                 {/* Game Room Top Info Bar */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-lg relative">
                   <div className="flex items-center gap-3">
                     <button
                       onClick={handleLeaveGame}
@@ -475,17 +489,61 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Spectator Indicator Badge */}
-                  {isSpectator && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-extrabold animate-pulse">
-                      <Radio className="w-4 h-4" />
-                      <span>LIVE SPECTATOR MODE</span>
-                      <span className="ml-1 text-[11px] font-mono opacity-80 flex items-center gap-1">
-                        <Eye className="w-3.5 h-3.5" />
-                        {room.spectatorsCount || 1}
-                      </span>
+                  {/* Mid-Game Theme Toggle & Spectator / Draw Indicator */}
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    {/* In-Game Theme Picker Popover */}
+                    <div className="relative">
+                      <button
+                        id="in-game-theme-button"
+                        onClick={() => setShowInGameThemePicker(!showInGameThemePicker)}
+                        title="Change Board Theme"
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center gap-2 border border-slate-700 transition-all hover:border-amber-500/50"
+                      >
+                        <Palette className="w-3.5 h-3.5 text-amber-400" />
+                        <span className="hidden sm:inline">{BOARD_THEMES[boardTheme]?.name || 'Theme'}</span>
+                        <div className="w-3.5 h-3.5 rounded overflow-hidden grid grid-cols-2 grid-rows-2 shadow border border-black/30 shrink-0">
+                          <div style={{ backgroundColor: BOARD_THEMES[boardTheme]?.lightTile || '#eeeed2' }} />
+                          <div style={{ backgroundColor: BOARD_THEMES[boardTheme]?.darkTile || '#769656' }} />
+                          <div style={{ backgroundColor: BOARD_THEMES[boardTheme]?.darkTile || '#769656' }} />
+                          <div style={{ backgroundColor: BOARD_THEMES[boardTheme]?.lightTile || '#eeeed2' }} />
+                        </div>
+                      </button>
+
+                      {showInGameThemePicker && (
+                        <div className="absolute right-0 mt-2 w-72 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-3 z-50 animate-fadeIn space-y-2">
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                            <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                              <Palette className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Select Board Theme</span>
+                            </div>
+                            <span className="text-[10px] text-amber-400 font-semibold px-1.5 py-0.5 rounded bg-slate-800">
+                              Instant Live Preview
+                            </span>
+                          </div>
+                          <BoardThemePicker
+                            currentTheme={boardTheme}
+                            onSelectTheme={(t) => {
+                              handleSelectTheme(t);
+                              setShowInGameThemePicker(false);
+                            }}
+                            variant="compact"
+                          />
+                        </div>
+                      )}
                     </div>
-                  )}
+
+                    {/* Spectator Indicator Badge */}
+                    {isSpectator && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-extrabold animate-pulse">
+                        <Radio className="w-4 h-4" />
+                        <span className="hidden sm:inline">LIVE SPECTATOR</span>
+                        <span className="ml-1 text-[11px] font-mono opacity-80 flex items-center gap-1">
+                          <Eye className="w-3.5 h-3.5" />
+                          {room.spectatorsCount || 1}
+                        </span>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Draw Offer Notification Banner */}
                   {!isSpectator && room.drawOfferedBy && (room.mode === 'pvp_local' || room.drawOfferedBy !== userColor) && (
@@ -574,6 +632,7 @@ export default function App() {
                       turn={displayedTurn}
                       orientation={userColor}
                       playerColor={boardPlayerColor}
+                      themeId={boardTheme}
                       disabled={isSpectator || room.status !== 'active'}
                       lastMove={displayedLastMove}
                       isHistoricalView={isHistoricalView}

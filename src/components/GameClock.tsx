@@ -61,12 +61,15 @@ export const GameClock: React.FC<GameClockProps> = ({
     formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${tenths}`;
   }
 
+  const isUnderTenSeconds = totalSeconds < 10 && isActive && displayTime > 0;
   const isLowTime = totalSeconds <= 30 && isActive;
 
   return (
     <div
       className={`p-3 sm:p-4 rounded-xl border transition-all flex items-center justify-between ${
-        isTurn
+        isUnderTenSeconds && isTurn
+          ? 'bg-slate-800/90 border-red-500/70 shadow-lg shadow-red-500/10 ring-2 ring-red-500/40'
+          : isTurn
           ? 'bg-slate-800/90 border-amber-500/60 shadow-lg shadow-amber-500/10 ring-2 ring-amber-500/30'
           : 'bg-slate-900/80 border-slate-800'
       }`}
@@ -101,15 +104,23 @@ export const GameClock: React.FC<GameClockProps> = ({
       {/* Clock Digital Display */}
       <div
         className={`px-4 py-2 rounded-lg font-mono font-bold text-lg sm:text-xl flex items-center gap-2 transition-colors ${
-          isLowTime
+          isUnderTenSeconds
+            ? 'bg-red-500/20 text-red-500 border border-red-500/60 shadow-md shadow-red-500/20 animate-subtle-shake font-extrabold'
+            : isLowTime
             ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse'
             : isTurn
             ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
             : 'bg-slate-800 text-slate-400 border border-slate-700'
         }`}
       >
-        {isLowTime ? <AlertCircle className="w-4 h-4 text-rose-400" /> : <Timer className="w-4 h-4 opacity-70" />}
-        <span>{formattedTime}</span>
+        {isUnderTenSeconds ? (
+          <AlertCircle className="w-4 h-4 text-red-500 animate-pulse shrink-0" />
+        ) : isLowTime ? (
+          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+        ) : (
+          <Timer className="w-4 h-4 opacity-70 shrink-0" />
+        )}
+        <span className={isUnderTenSeconds ? 'text-red-500' : undefined}>{formattedTime}</span>
       </div>
     </div>
   );

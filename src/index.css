@@ -1,1 +1,17 @@
 @import "tailwindcss";
+
+@keyframes subtle-shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  20%, 60% {
+    transform: translateX(-1.5px) rotate(-0.4deg);
+  }
+  40%, 80% {
+    transform: translateX(1.5px) rotate(0.4deg);
+  }
+}
+
+.animate-subtle-shake {
+  animation: subtle-shake 0.35s ease-in-out infinite;
+}

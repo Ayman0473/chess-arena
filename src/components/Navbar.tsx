@@ -1,12 +1,15 @@
-import React from 'react';
-import { UserProfile } from '../types';
-import { Trophy, Volume2, VolumeX, User, LogOut, Swords, History, BookOpen, Shield, Flame } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { UserProfile, BoardThemeId } from '../types';
+import { Trophy, Volume2, VolumeX, User, LogOut, Swords, History, BookOpen, Shield, Flame, Palette, Check } from 'lucide-react';
 import { sounds } from '../lib/audio';
+import { BOARD_THEMES } from '../lib/themes';
 
 interface NavbarProps {
   user: UserProfile | null;
   activeTab: 'play' | 'leaderboard' | 'history' | 'guide';
   setActiveTab: (tab: 'play' | 'leaderboard' | 'history' | 'guide') => void;
+  currentTheme: BoardThemeId;
+  onSelectTheme: (theme: BoardThemeId) => void;
   onOpenAuth: () => void;
   onLogout: () => void;
   isMuted: boolean;
@@ -17,11 +20,26 @@ export const Navbar: React.FC<NavbarProps> = ({
   user,
   activeTab,
   setActiveTab,
+  currentTheme,
+  onSelectTheme,
   onOpenAuth,
   onLogout,
   isMuted,
   setIsMuted,
 }) => {
+  const [themeOpen, setThemeOpen] = useState(false);
+  const themeRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (themeRef.current && !themeRef.current.contains(event.target as Node)) {
+        setThemeOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const toggleAudio = () => {
     const next = !isMuted;
     setIsMuted(next);
@@ -113,6 +131,74 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right Controls / Profile */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Board Theme Picker Popover */}
+          <div className="relative" ref={themeRef}>
+            <button
+              id="navbar-theme-button"
+              onClick={() => setThemeOpen(!themeOpen)}
+              title="Change Board Theme"
+              className={`p-2 rounded-xl text-slate-300 hover:text-amber-400 hover:bg-slate-800 transition-colors flex items-center gap-1.5 ${
+                themeOpen ? 'bg-slate-800 text-amber-400 ring-1 ring-amber-500/50' : ''
+              }`}
+            >
+              <Palette className="w-5 h-5 text-amber-400" />
+              <div className="w-4 h-4 rounded overflow-hidden grid grid-cols-2 grid-rows-2 shadow border border-black/30 shrink-0">
+                <div style={{ backgroundColor: BOARD_THEMES[currentTheme]?.lightTile || '#eeeed2' }} />
+                <div style={{ backgroundColor: BOARD_THEMES[currentTheme]?.darkTile || '#769656' }} />
+                <div style={{ backgroundColor: BOARD_THEMES[currentTheme]?.darkTile || '#769656' }} />
+                <div style={{ backgroundColor: BOARD_THEMES[currentTheme]?.lightTile || '#eeeed2' }} />
+              </div>
+            </button>
+
+            {themeOpen && (
+              <div className="absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-3 z-50 animate-fadeIn space-y-2">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                    <Palette className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Board Themes</span>
+                  </div>
+                  <span className="text-[10px] font-semibold text-amber-400 px-1.5 py-0.5 rounded bg-slate-800">
+                    {BOARD_THEMES[currentTheme]?.name}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-1 max-h-64 overflow-y-auto pr-0.5">
+                  {Object.values(BOARD_THEMES).map((t) => {
+                    const isSelected = currentTheme === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => {
+                          onSelectTheme(t.id);
+                          setThemeOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between p-2 rounded-xl transition-all ${
+                          isSelected
+                            ? 'bg-amber-500/10 text-amber-300 font-bold border border-amber-500/40'
+                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-6 h-6 rounded-md overflow-hidden grid grid-cols-2 grid-rows-2 shadow border border-black/30 shrink-0">
+                            <div style={{ backgroundColor: t.lightTile }} />
+                            <div style={{ backgroundColor: t.darkTile }} />
+                            <div style={{ backgroundColor: t.darkTile }} />
+                            <div style={{ backgroundColor: t.lightTile }} />
+                          </div>
+                          <div className="text-left">
+                            <div className="text-xs">{t.name}</div>
+                            <div className="text-[9px] text-slate-400">{t.tagline}</div>
+                          </div>
+                        </div>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-amber-400" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Mute Toggle */}
           <button
             onClick={toggleAudio}
